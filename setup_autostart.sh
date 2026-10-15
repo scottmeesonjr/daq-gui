@@ -1,11 +1,4 @@
 #!/bin/bash
-# Project Aurelian DAQ: field setup.
-#   On the Pi 4 (receiver):     bash setup_autostart.sh rx
-#   On the Pi 5 (transmitter):  bash setup_autostart.sh tx   (ONLY once its antenna is on)
-#
-# rx: dashboard starts on boot + Pi broadcasts its own "Aurelian-DAQ" WiFi network
-# tx: transmitter starts on boot
-# Run as your normal user (not with sudo); it asks for sudo where needed.
 set -e
 
 ROLE="$1"
