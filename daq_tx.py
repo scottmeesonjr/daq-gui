@@ -1,41 +1,24 @@
-"""
-Project Aurelian DAQ: transmitter (runs on the Pi 5, at the test stand).
-
-Reads the Arduino's serial lines, e.g.
-    PT1:452.10,PT2:NC,PT3:88.30,PT4:NC,LC1:12.500,TC1:NC
-and radios the newest reading to the receiver Pi over the RFM69.
-
-The Arduino's SD card is still the official record. This only feeds the
-live view, so it always sends the NEWEST reading and drops anything older
-rather than falling behind.
-
-Usage:
-    python daq_tx.py              # normal: Arduino -> radio
-    python daq_tx.py --no-radio   # bench test: Arduino -> terminal only
-                                  # (use this until the antenna is on)
-"""
-
 import argparse
 import time
 
 import serial
 
-# ---------- settings: must match daq_rx_dashboard.py ----------
+# settings must match daq_rx_dashboard.py
 SERIAL_PORT = "/dev/ttyACM0"   # Uno over USB. Check with: ls /dev/ttyACM* /dev/ttyUSB*
 SERIAL_BAUD = 115200
 
 RADIO_FREQ_MHZ = 915.0
-ENCRYPTION_KEY = b"AurelianDAQ_k_01"   # exactly 16 bytes, same on both Pis
+ENCRYPTION_KEY = b"AurelianDAQ_k_01"
 MY_NODE = 1
 RX_NODE = 2
-TX_POWER_DBM = 20             # RFM69HCW high-power; lower to 14 for close bench tests
+TX_POWER_DBM = 20 # lower to 14 for bench testing
 
-# RFM69 wiring (Pi GPIO numbers) — change to match how you wired the Pi 5
+#PI5 wiring
 CS_PIN = "CE1"     # physical pin 26
 RESET_PIN = "D25"  # physical pin 22
 
 FIELDS = ["PT1", "PT2", "PT3", "PT4", "LC1", "TC1"]
-SEND_INTERVAL_S = 0.1          # max 10 packets/s; raise if the link is flaky
+SEND_INTERVAL_S = 0.1 # max = 10 packets
 # ----------------------------------------------------------------
 
 
@@ -65,7 +48,7 @@ def parse_line(line):
         key, val = part.split(":", 1)
         values[key.strip()] = val.strip()
     if not all(f in values for f in FIELDS):
-        return None      # status/warning lines from the Arduino, ignore
+        return None
     return values
 
 
@@ -114,7 +97,6 @@ def main():
             buf = b""
             continue
 
-        # keep only the newest complete reading
         while b"\n" in buf:
             raw, buf = buf.split(b"\n", 1)
             values = parse_line(raw.decode(errors="ignore").strip())
