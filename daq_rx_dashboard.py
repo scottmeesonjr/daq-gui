@@ -1,15 +1,13 @@
 """
-Project Aurelian DAQ: receiver + live dashboard (runs on the Pi 4, at standoff).
+Project Aurelian DAQ: receiver + live dashboard
 
 Listens for packets from daq_tx.py and serves a live dashboard at
     http://aurelian-rx.local:5000   (any browser on the same network)
     http://localhost:5000           (a monitor plugged into this Pi)
 
 Two kinds of CSV files are written:
-  rx_log_<date>.csv     everything received, always on, as a backup
-  recordings/*.csv      only while "Start Data Acquisition" is pressed;
-                        downloadable from the dashboard
-The Arduino's SD card is still the official, full-rate record.
+  1) rx_log_<date>.csv     everything received, always on, backup data
+  2) recordings/*.csv      only while "Start Data Acquisition" is pressed, downloadable from the dashboard
 
 Usage:
     python daq_rx_dashboard.py         # normal: radio -> dashboard
@@ -30,24 +28,19 @@ from zoneinfo import ZoneInfo
 
 from flask import Flask, jsonify, request, send_from_directory
 
-# ---------- radio settings: must match daq_tx.py ----------
+# radio settings: must match daq_tx.py
 RADIO_FREQ_MHZ = 915.0
-ENCRYPTION_KEY = b"AurelianDAQ_k_01"   # exactly 16 bytes, same on both Pis
+ENCRYPTION_KEY = b"AurelianDAQ_k_01"
 MY_NODE = 2
 
 CS_PIN = "CE1"     # physical pin 26
 RESET_PIN = "D25"  # physical pin 22
 
-# ---------- sensors ----------
+## sensors
 # (key, label shown on dashboard, unit, over-pressure limit or None)
 # Order here must match the Arduino/transmitter field order.
-# Dashboard layout is two columns, filled left to right:
-#     PT-1 | PT-2
-#     PT-3 | PT-4
-#     Load Cell | Thermocouple
-#
-# TODO: set each PT's limit from your Range Safety Plan abort criteria.
-#       600 psi is a placeholder, not a real number for this system.
+# May need to calibrate to eliminate noise
+
 SENSORS = [
     ("PT1", "PT-1", "psi", 600),
     ("PT2", "PT-2", "psi", 600),
@@ -76,7 +69,7 @@ state = {
 }
 
 
-# ---------- data acquisition recording ----------
+# data acquisition recording
 rec_lock = threading.Lock()
 rec = {"active": False, "file": None, "writer": None, "path": None,
        "t0": None, "rows": 0, "clock_offset": 0.0, "events": []}
@@ -101,8 +94,6 @@ def rec_start(name, client_ms):
     with rec_lock:
         if rec["active"]:
             return
-        # The Pi has no battery clock, so with no internet at the test site its
-        # time can be wrong. Borrow the clock of the browser that pressed Start.
         rec["clock_offset"] = (client_ms / 1000 - time.time()) if client_ms else 0.0
         stamp = eastern_now(rec["clock_offset"])
         safe = re.sub(r"[^A-Za-z0-9_-]+", "_", name or "").strip("_")[:40]
@@ -116,7 +107,7 @@ def rec_start(name, client_ms):
         rec.update(active=True, file=f, writer=w, path=path, t0=time.time(), rows=0,
                    events=[])
         print(f"Recording started: {path.name}")
-    reset_peaks()                                    # peaks are per-recording
+    reset_peaks() # peaks are per-recording
 
 
 def rec_stop():
@@ -135,8 +126,8 @@ def rec_write(seq, vals, rssi):
         now = time.time()
         rec["writer"].writerow(
             [f"{now - rec['t0']:.3f}", fmt_eastern(eastern_now(rec["clock_offset"])), seq, rssi]
-            + [vals[f] for f in FIELDS] + [""])     # unplugged sensors are written as NC
-        rec["file"].flush()                         # nothing lost if power drops
+            + [vals[f] for f in FIELDS] + [""]) # unplugged sensors are written as NC
+        rec["file"].flush() # nothing lost if power drops
         rec["rows"] += 1
 
 
@@ -185,7 +176,7 @@ def record(seq, vals, rssi, writer, logfile):
         last = state["last_seq"]
         if last is not None:
             gap = (seq - last - 1) % 100000
-            if gap < 1000:          # ignore huge jumps (transmitter restarted)
+            if gap < 1000: # ignore huge jumps (transmitter restarted)
                 state["lost"] += gap
         state["last_seq"] = seq
         state["values"] = vals
@@ -260,7 +251,7 @@ def sim_loop():
             "LC1": round(max(0, 120 * math.sin(t / 5)) + random.uniform(-1, 1), 3),
             "TC1": round(24 + random.uniform(-0.25, 0.25), 2),
         }
-        if random.random() > 0.03:            # drop ~3% to exercise the loss counter
+        if random.random() > 0.03: # drop ~3% to exercise the loss counter
             record(seq, vals, -40 - random.randint(0, 25), writer, logfile)
         seq += 1
         time.sleep(0.1)
